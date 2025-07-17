@@ -1,68 +1,83 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useInView } from 'react-intersection-observer';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
-import { 
-  Rocket, 
-  Zap, 
-  Shield, 
-  Droplets, 
-  BarChart3, 
-  Lock, 
+import React from "react";
+import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useInView } from "react-intersection-observer";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import {
+  Rocket,
+  Zap,
+  Shield,
+  Droplets,
+  BarChart3,
+  Lock,
   Globe,
   ArrowRight,
   Star,
-  Users,
-  TrendingUp
-} from 'lucide-react';
-import Footer from '../components/Footer';
+  // Users,
+  // TrendingUp
+} from "lucide-react";
+import Footer from "../components/Footer";
 
 const NewLandingPage: React.FC = () => {
-  const [heroRef, heroInView] = useInView({ threshold: 0.1, triggerOnce: true });
-  const [featuresRef, featuresInView] = useInView({ threshold: 0.1, triggerOnce: true });
-  const [statsRef, statsInView] = useInView({ threshold: 0.1, triggerOnce: true });
+  const [heroRef, heroInView] = useInView({
+    threshold: 0.1,
+    triggerOnce: true,
+  });
+  const [featuresRef, featuresInView] = useInView({
+    threshold: 0.1,
+    triggerOnce: true,
+  });
+  const [statsRef, statsInView] = useInView({
+    threshold: 0.1,
+    triggerOnce: true,
+  });
   const [ctaRef, ctaInView] = useInView({ threshold: 0.1, triggerOnce: true });
 
   const features = [
     {
       icon: Zap,
       title: "Lightning Fast Deployment",
-      description: "Deploy your tokens and NFTs in under 60 seconds with our optimized Solana infrastructure"
+      description:
+        "Deploy your tokens and NFTs in under 60 seconds with our optimized Solana infrastructure",
     },
     {
       icon: Shield,
       title: "Bank-Grade Security",
-      description: "Multi-signature wallets, audited smart contracts, and enterprise-level security protocols"
+      description:
+        "Multi-signature wallets, audited smart contracts, and enterprise-level security protocols",
     },
     {
       icon: Droplets,
       title: "Liquidity Pool Creator",
-      description: "Create and manage liquidity pools with automated market making - Coming Soon!",
-      badge: "Coming Soon"
+      description:
+        "Create and manage liquidity pools with automated market making - Coming Soon!",
+      badge: "Coming Soon",
     },
     {
       icon: BarChart3,
       title: "Advanced Analytics",
-      description: "Real-time tracking, holder analytics, and comprehensive project insights dashboard"
+      description:
+        "Real-time tracking, holder analytics, and comprehensive project insights dashboard",
     },
     {
       icon: Lock,
       title: "Token Vesting & Locks",
-      description: "Built-in vesting schedules and token locks to build investor confidence"
+      description:
+        "Built-in vesting schedules and token locks to build investor confidence",
     },
     {
       icon: Globe,
       title: "Global Distribution",
-      description: "Worldwide accessibility with multi-language support and global payment methods"
-    }
+      description:
+        "Worldwide accessibility with multi-language support and global payment methods",
+    },
   ];
 
   const stats = [
     { number: "500+", label: "Projects Launched" },
     { number: "$50M+", label: "Total Volume" },
     { number: "100K+", label: "Active Users" },
-    { number: "99.9%", label: "Uptime" }
+    { number: "99.9%", label: "Uptime" },
   ];
 
   return (
@@ -82,17 +97,28 @@ const NewLandingPage: React.FC = () => {
               <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center">
                 <Rocket className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">Solana Launchpad</span>
+              <span className="text-xl font-bold text-white">
+                Solana Launchpad
+              </span>
             </div>
 
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/upcoming" className="text-gray-300 hover:text-white transition-colors font-inter">
+              <Link
+                to="/upcoming"
+                className="text-gray-300 hover:text-white transition-colors font-inter"
+              >
                 Upcoming
               </Link>
-              <Link to="/apply" className="text-gray-300 hover:text-white transition-colors font-inter">
+              <Link
+                to="/apply"
+                className="text-gray-300 hover:text-white transition-colors font-inter"
+              >
                 Apply
               </Link>
-              <Link to="/launchpad" className="text-gray-300 hover:text-white transition-colors font-inter">
+              <Link
+                to="/launchpad"
+                className="text-gray-300 hover:text-white transition-colors font-inter"
+              >
                 Create Token
               </Link>
             </div>
@@ -111,12 +137,12 @@ const NewLandingPage: React.FC = () => {
             transition={{ duration: 0.8 }}
           >
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
-              Launch your Solana Project{' '}
+              Launch your Solana Project{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
                 in Minutes
               </span>
             </h1>
-            
+
             {/* Prominent Security & Speed Message */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -140,7 +166,8 @@ const NewLandingPage: React.FC = () => {
               transition={{ duration: 0.8, delay: 0.4 }}
               className="text-xl md:text-2xl text-gray-300 font-inter mb-12 max-w-3xl mx-auto"
             >
-              The most advanced platform to launch NFT collections, tokens, and liquidity pools on Solana
+              The most advanced platform to launch NFT collections, tokens, and
+              liquidity pools on Solana
             </motion.p>
 
             <motion.div
@@ -156,7 +183,7 @@ const NewLandingPage: React.FC = () => {
                 <span>Apply for Launch</span>
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
-              
+
               <Link
                 to="/upcoming"
                 className="bg-white/10 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/20 transition-all duration-300"
@@ -205,13 +232,14 @@ const NewLandingPage: React.FC = () => {
             className="text-center mb-16"
           >
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Powerful{' '}
+              Powerful{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
                 Features
               </span>
             </h2>
             <p className="text-xl text-gray-300 font-inter max-w-2xl mx-auto">
-              Everything you need to launch and manage successful Solana projects
+              Everything you need to launch and manage successful Solana
+              projects
             </p>
           </motion.div>
 
@@ -230,15 +258,15 @@ const NewLandingPage: React.FC = () => {
                     {feature.badge}
                   </div>
                 )}
-                
+
                 <div className="w-16 h-16 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
                   <feature.icon className="w-8 h-8 text-purple-400 group-hover:text-cyan-400 transition-colors duration-300" />
                 </div>
-                
+
                 <h3 className="text-xl font-bold text-white mb-4 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-cyan-400 transition-all duration-300">
                   {feature.title}
                 </h3>
-                
+
                 <p className="text-gray-300 font-inter leading-relaxed">
                   {feature.description}
                 </p>
@@ -258,14 +286,15 @@ const NewLandingPage: React.FC = () => {
             className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-12"
           >
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Ready to{' '}
+              Ready to{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
                 Launch?
               </span>
             </h2>
-            
+
             <p className="text-xl text-gray-300 font-inter mb-8 max-w-2xl mx-auto">
-              Join hundreds of successful projects that have launched on our platform
+              Join hundreds of successful projects that have launched on our
+              platform
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -276,7 +305,7 @@ const NewLandingPage: React.FC = () => {
                 <span>Apply Now</span>
                 <Star className="w-5 h-5 group-hover:rotate-12 transition-transform" />
               </Link>
-              
+
               <Link
                 to="/launchpad"
                 className="bg-white/10 backdrop-blur-sm border border-white/20 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/20 transition-all duration-300 flex items-center space-x-2"

@@ -1,63 +1,205 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAccount, useConnect } from 'wagmi';
-import { ArrowLeft, Upload, Snowflake, Coins, Edit3, ChevronDown, ChevronUp, Rocket } from 'lucide-react';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { Keypair, Transaction, SystemProgram } from "@solana/web3.js";
+import { uploadToIPFS } from "../utils/uploadToIPFS.ts";
+import { createCreateMetadataAccountV3Instruction } from "@metaplex-foundation/mpl-token-metadata";
+import {
+  TOKEN_PROGRAM_ID,
+  createInitializeMintInstruction,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
+  createMintToInstruction,
+} from "@solana/spl-token";
+import { PublicKey } from "@solana/web3.js";
+const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s" // this is the official one
+);
+
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+
+import {
+  ArrowLeft,
+  Upload,
+  Snowflake,
+  Coins,
+  Edit3,
+  ChevronDown,
+  ChevronUp,
+  Rocket,
+} from "lucide-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
 const LaunchpadPage: React.FC = () => {
-  const { address, isConnected } = useAccount();
-  const { connect, connectors } = useConnect();
+  const { publicKey, connected, sendTransaction } = useWallet();
+  const wallet = useWallet();
+  const { connection } = useConnection();
+
+  const [mintedTokenAddress, setMintedTokenAddress] = useState<string | null>(
+    null
+  );
 
   const [formData, setFormData] = useState({
-    name: '',
-    symbol: '',
+    name: "",
+    symbol: "",
     decimals: 6,
     supply: 1,
-    description: '',
-    image: null as File | null
+    description: "",
+    image: null as File | null,
   });
 
   const [socialLinks, setSocialLinks] = useState(false);
   const [revokeOptions, setRevokeOptions] = useState({
     freeze: false,
     mint: false,
-    update: false
+    update: false,
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: name === 'decimals' || name === 'supply' ? Number(value) : value
+      [name]: name === "decimals" || name === "supply" ? Number(value) : value,
     }));
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setFormData(prev => ({ ...prev, image: file }));
+      setFormData((prev) => ({ ...prev, image: file }));
     }
   };
 
   const handleRevokeChange = (option: keyof typeof revokeOptions) => {
-    setRevokeOptions(prev => ({
+    setRevokeOptions((prev) => ({
       ...prev,
-      [option]: !prev[option]
+      [option]: !prev[option],
     }));
   };
 
-  const handleConnect = () => {
-    if (connectors.length > 0) {
-      connect({ connector: connectors[0] });
-    }
-  };
-
-  const handleMintToken = () => {
-    if (!isConnected) {
-      handleConnect();
+  const handleMintToken = async () => {
+    if (!connected) {
+      alert("Wallet Not Connected! Connect Wallet First");
       return;
     }
-    // Token minting logic here
-    console.log('Minting token with data:', formData);
+
+    if (!publicKey) {
+      return;
+    }
+    if (!formData.image) {
+      alert("Upload image first.");
+      return;
+    }
+    if (!wallet) {
+      return;
+    }
+
+    const metadataUri = await uploadToIPFS(
+      formData.image,
+      formData.name,
+      formData.description,
+      formData.symbol,
+      wallet
+    );
+
+    const mint = Keypair.generate();
+    const decimals = formData.decimals;
+    const supply = formData.supply * 10 ** decimals;
+
+    const lamportsForMint = await connection.getMinimumBalanceForRentExemption(
+      82
+    );
+
+    const transaction = new Transaction();
+
+    transaction.add(
+      SystemProgram.createAccount({
+        fromPubkey: publicKey,
+        newAccountPubkey: mint.publicKey,
+        space: 82,
+        lamports: lamportsForMint,
+        programId: TOKEN_PROGRAM_ID,
+      })
+    );
+
+    transaction.add(
+      createInitializeMintInstruction(mint.publicKey, decimals, publicKey, null)
+    );
+
+    const ata = await getAssociatedTokenAddress(mint.publicKey, publicKey);
+
+    transaction.add(
+      createAssociatedTokenAccountInstruction(
+        publicKey,
+        ata,
+        publicKey,
+        mint.publicKey
+      )
+    );
+
+    transaction.add(
+      createMintToInstruction(mint.publicKey, ata, publicKey, supply)
+    );
+
+    const [metadataPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        mint.publicKey.toBuffer(),
+      ],
+      TOKEN_METADATA_PROGRAM_ID
+    );
+
+    if (!metadataUri) {
+      return;
+    }
+    const metadataInstruction = createCreateMetadataAccountV3Instruction(
+      {
+        metadata: metadataPda,
+        mint: mint.publicKey,
+        mintAuthority: publicKey,
+        payer: publicKey,
+        updateAuthority: publicKey,
+      },
+      {
+        createMetadataAccountArgsV3: {
+          data: {
+            name: formData.name,
+            symbol: formData.symbol,
+            uri: metadataUri,
+            sellerFeeBasisPoints: 0,
+            creators: null,
+            collection: null,
+            uses: null,
+          },
+          isMutable: true,
+          collectionDetails: null,
+        },
+      }
+    );
+
+    transaction.add(metadataInstruction);
+
+    try {
+      const signature = await sendTransaction(transaction, connection, {
+        signers: [mint],
+      });
+
+      const latestBlockhash = await connection.getLatestBlockhash();
+
+      await connection.confirmTransaction(
+        {
+          signature,
+          ...latestBlockhash,
+        },
+        "confirmed"
+      );
+      setMintedTokenAddress(mint.publicKey.toBase58());
+    } catch (err) {
+      console.error(err);
+      alert("Minting failed.");
+    }
   };
 
   return (
@@ -66,16 +208,16 @@ const LaunchpadPage: React.FC = () => {
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {/* Top left circular gradient */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl animate-pulse-slow"></div>
-        
+
         {/* Top right circular gradient */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-cyan-500/12 rounded-full blur-3xl animate-pulse-slow delay-500"></div>
-        
+
         {/* Bottom left circular gradient */}
         <div className="absolute -bottom-32 -left-20 w-72 h-72 bg-purple-500/8 rounded-full blur-3xl animate-pulse-slow delay-1000"></div>
-        
+
         {/* Bottom right circular gradient */}
         <div className="absolute -bottom-20 -right-32 w-88 h-88 bg-cyan-500/10 rounded-full blur-3xl animate-pulse-slow delay-1500"></div>
-        
+
         {/* Center subtle glow */}
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gradient-to-r from-purple-500/5 to-cyan-500/5 rounded-full blur-3xl"></div>
       </div>
@@ -85,44 +227,45 @@ const LaunchpadPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link to="/" className="text-gray-300 hover:text-white transition-colors">
+              <Link
+                to="/"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
                 <ArrowLeft className="w-6 h-6" />
               </Link>
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-cyan-500 rounded-xl flex items-center justify-center">
                   <Rocket className="w-6 h-6 text-white" />
                 </div>
-                <span className="text-xl font-bold text-white">Solana Launchpad</span>
+                <span className="text-xl font-bold text-white">
+                  Solana Launchpad
+                </span>
               </div>
             </div>
 
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/upcoming" className="text-gray-300 hover:text-white transition-colors font-inter">
+              <Link
+                to="/upcoming"
+                className="text-gray-300 hover:text-white transition-colors font-inter"
+              >
                 Upcoming
               </Link>
-              <Link to="/apply" className="text-gray-300 hover:text-white transition-colors font-inter">
+              <Link
+                to="/apply"
+                className="text-gray-300 hover:text-white transition-colors font-inter"
+              >
                 Apply
               </Link>
-              <Link to="/launchpad" className="text-purple-400 font-inter font-semibold">
+              <Link
+                to="/launchpad"
+                className="text-purple-400 font-inter font-semibold"
+              >
                 Create Token
               </Link>
             </div>
 
             <div className="flex items-center space-x-4">
-              {isConnected ? (
-                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2">
-                  <span className="text-white font-inter text-sm">
-                    {address?.slice(0, 6)}...{address?.slice(-4)}
-                  </span>
-                </div>
-              ) : (
-                <button
-                  onClick={handleConnect}
-                  className="bg-gradient-to-r from-purple-500 to-cyan-500 border-none rounded-xl px-6 py-3 text-white font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25"
-                >
-                  Connect Wallet
-                </button>
-              )}
+              {connected ? <WalletMultiButton /> : <WalletMultiButton />}
             </div>
           </div>
         </div>
@@ -131,8 +274,10 @@ const LaunchpadPage: React.FC = () => {
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
           <div className="p-8">
-            <h2 className="text-3xl font-bold mb-8 text-center text-white">Create Your Token</h2>
-            
+            <h2 className="text-3xl font-bold mb-8 text-center text-white">
+              Create Your Token
+            </h2>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Left Column */}
               <div className="space-y-6">
@@ -149,7 +294,9 @@ const LaunchpadPage: React.FC = () => {
                     placeholder="Ex: Solana"
                     className="w-full px-4 py-3 bg-white/5 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all font-inter"
                   />
-                  <p className="text-gray-300 text-xs mt-1 font-inter">Max 32 characters in your name</p>
+                  <p className="text-gray-300 text-xs mt-1 font-inter">
+                    Max 32 characters in your name
+                  </p>
                 </div>
 
                 {/* Symbol */}
@@ -165,7 +312,9 @@ const LaunchpadPage: React.FC = () => {
                     placeholder="Ex: SOL"
                     className="w-full px-4 py-3 bg-white/5 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-gray-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all font-inter"
                   />
-                  <p className="text-gray-300 text-xs mt-1 font-inter">Max 8 characters in your symbol</p>
+                  <p className="text-gray-300 text-xs mt-1 font-inter">
+                    Max 8 characters in your symbol
+                  </p>
                 </div>
 
                 {/* Decimals */}
@@ -184,15 +333,23 @@ const LaunchpadPage: React.FC = () => {
                       className="w-full px-4 py-3 bg-white/5 backdrop-blur-sm border border-white/20 rounded-xl text-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all font-inter"
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex flex-col">
-                      <button type="button" className="text-gray-300 hover:text-white">
+                      <button
+                        type="button"
+                        className="text-gray-300 hover:text-white"
+                      >
                         <ChevronUp className="w-4 h-4" />
                       </button>
-                      <button type="button" className="text-gray-300 hover:text-white">
+                      <button
+                        type="button"
+                        className="text-gray-300 hover:text-white"
+                      >
                         <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <p className="text-gray-300 text-xs mt-1 font-inter">Most tokens use 6 decimals</p>
+                  <p className="text-gray-300 text-xs mt-1 font-inter">
+                    Most tokens use 6 decimals
+                  </p>
                 </div>
 
                 {/* Supply */}
@@ -210,15 +367,23 @@ const LaunchpadPage: React.FC = () => {
                       className="w-full px-4 py-3 bg-white/5 backdrop-blur-sm border border-white/20 rounded-xl text-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 focus:outline-none transition-all font-inter"
                     />
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex flex-col">
-                      <button type="button" className="text-gray-300 hover:text-white">
+                      <button
+                        type="button"
+                        className="text-gray-300 hover:text-white"
+                      >
                         <ChevronUp className="w-4 h-4" />
                       </button>
-                      <button type="button" className="text-gray-300 hover:text-white">
+                      <button
+                        type="button"
+                        className="text-gray-300 hover:text-white"
+                      >
                         <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <p className="text-gray-300 text-xs mt-1 font-inter">Most tokens use 1B supply</p>
+                  <p className="text-gray-300 text-xs mt-1 font-inter">
+                    Most tokens use 1B supply
+                  </p>
                 </div>
 
                 {/* Description */}
@@ -251,8 +416,12 @@ const LaunchpadPage: React.FC = () => {
                   </label>
                   <label className="block border-2 border-dashed border-white/20 rounded-xl p-12 text-center hover:border-purple-500/50 transition-colors cursor-pointer bg-white/5 backdrop-blur-sm">
                     <Upload className="w-8 h-8 text-gray-300 mx-auto mb-4" />
-                    <p className="text-white font-medium font-inter">Drag and drop here to upload</p>
-                    <p className="text-gray-300 text-sm mt-1 font-inter">.png, .jpg 1000x1000 px</p>
+                    <p className="text-white font-medium font-inter">
+                      Drag and drop here to upload
+                    </p>
+                    <p className="text-gray-300 text-sm mt-1 font-inter">
+                      .png, .jpg 1000x1000 px
+                    </p>
                     <input
                       type="file"
                       accept="image/*"
@@ -268,8 +437,12 @@ const LaunchpadPage: React.FC = () => {
             <div className="mt-8 border-t border-white/10 pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-white font-medium font-inter">Add Social Links & Tags</h3>
-                  <p className="text-gray-300 text-sm font-inter">Add links to your token metadata.</p>
+                  <h3 className="text-white font-medium font-inter">
+                    Add Social Links & Tags
+                  </h3>
+                  <p className="text-gray-300 text-sm font-inter">
+                    Add links to your token metadata.
+                  </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -278,8 +451,16 @@ const LaunchpadPage: React.FC = () => {
                     onChange={(e) => setSocialLinks(e.target.checked)}
                     className="sr-only"
                   />
-                  <div className={`w-11 h-6 rounded-full transition-colors ${socialLinks ? 'bg-purple-500' : 'bg-white/20'}`}>
-                    <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${socialLinks ? 'translate-x-5' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
+                  <div
+                    className={`w-11 h-6 rounded-full transition-colors ${
+                      socialLinks ? "bg-purple-500" : "bg-white/20"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
+                        socialLinks ? "translate-x-5" : "translate-x-0"
+                      } mt-0.5 ml-0.5`}
+                    ></div>
                   </div>
                 </label>
               </div>
@@ -287,9 +468,13 @@ const LaunchpadPage: React.FC = () => {
 
             {/* Revoke Authorities */}
             <div className="mt-8 border-t border-white/10 pt-6">
-              <h3 className="text-white font-medium mb-2 font-inter">Revoke Authorities</h3>
+              <h3 className="text-white font-medium mb-2 font-inter">
+                Revoke Authorities
+              </h3>
               <p className="text-gray-300 text-sm mb-6 font-inter">
-                Solana Token has 3 authorities: Freeze Authority, Mint Authority, and Update Authority. Revoke them to attract more investors.
+                Solana Token has 3 authorities: Freeze Authority, Mint
+                Authority, and Update Authority. Revoke them to attract more
+                investors.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -297,7 +482,9 @@ const LaunchpadPage: React.FC = () => {
                 <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <div className="flex items-center space-x-2 mb-2">
                     <Snowflake className="w-5 h-5 text-blue-400" />
-                    <span className="font-medium text-white font-inter">Revoke Freeze</span>
+                    <span className="font-medium text-white font-inter">
+                      Revoke Freeze
+                    </span>
                   </div>
                   <p className="text-gray-300 text-sm mb-4 font-inter">
                     No one will be able to freeze token accounts anymore
@@ -306,10 +493,12 @@ const LaunchpadPage: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={revokeOptions.freeze}
-                      onChange={() => handleRevokeChange('freeze')}
+                      onChange={() => handleRevokeChange("freeze")}
                       className="w-4 h-4 text-purple-500 bg-white/10 border-white/20 rounded focus:ring-purple-500 focus:ring-2"
                     />
-                    <span className="text-xs text-gray-300 font-inter">+0.1 SOL</span>
+                    <span className="text-xs text-gray-300 font-inter">
+                      +0.1 SOL
+                    </span>
                   </label>
                 </div>
 
@@ -317,7 +506,9 @@ const LaunchpadPage: React.FC = () => {
                 <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <div className="flex items-center space-x-2 mb-2">
                     <Coins className="w-5 h-5 text-yellow-400" />
-                    <span className="font-medium text-white font-inter">Revoke Mint</span>
+                    <span className="font-medium text-white font-inter">
+                      Revoke Mint
+                    </span>
                   </div>
                   <p className="text-gray-300 text-sm mb-4 font-inter">
                     No one will be able to create more tokens anymore
@@ -326,10 +517,12 @@ const LaunchpadPage: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={revokeOptions.mint}
-                      onChange={() => handleRevokeChange('mint')}
+                      onChange={() => handleRevokeChange("mint")}
                       className="w-4 h-4 text-purple-500 bg-white/10 border-white/20 rounded focus:ring-purple-500 focus:ring-2"
                     />
-                    <span className="text-xs text-gray-300 font-inter">+0.1 SOL</span>
+                    <span className="text-xs text-gray-300 font-inter">
+                      +0.1 SOL
+                    </span>
                   </label>
                 </div>
 
@@ -337,7 +530,9 @@ const LaunchpadPage: React.FC = () => {
                 <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
                   <div className="flex items-center space-x-2 mb-2">
                     <Edit3 className="w-5 h-5 text-purple-400" />
-                    <span className="font-medium text-white font-inter">Revoke Update</span>
+                    <span className="font-medium text-white font-inter">
+                      Revoke Update
+                    </span>
                   </div>
                   <p className="text-gray-300 text-sm mb-4 font-inter">
                     No one will be able to modify token metadata anymore
@@ -346,10 +541,12 @@ const LaunchpadPage: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={revokeOptions.update}
-                      onChange={() => handleRevokeChange('update')}
+                      onChange={() => handleRevokeChange("update")}
                       className="w-4 h-4 text-purple-500 bg-white/10 border-white/20 rounded focus:ring-purple-500 focus:ring-2"
                     />
-                    <span className="text-xs text-gray-300 font-inter">+0.1 SOL</span>
+                    <span className="text-xs text-gray-300 font-inter">
+                      +0.1 SOL
+                    </span>
                   </label>
                 </div>
               </div>
@@ -357,18 +554,32 @@ const LaunchpadPage: React.FC = () => {
 
             {/* Mint Token Button */}
             <div className="mt-8 pt-6 border-t border-white/10">
-              <button 
+              <button
                 onClick={handleMintToken}
                 className="w-full bg-gradient-to-r from-purple-500 to-cyan-500 border-none rounded-xl py-4 text-lg font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-500/25 text-white font-inter"
               >
-                {isConnected ? 'Mint Token' : 'Connect Wallet to Mint'}
+                {connected ? "Mint Token" : "Connect Wallet to Mint"}
               </button>
             </div>
+
+            {mintedTokenAddress && (
+              <div className="mt-4 text-center">
+                <a
+                  href={`https://explorer.solana.com/address/${mintedTokenAddress}?cluster=devnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block bg-cyan-500/90 hover:bg-cyan-600 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-300 shadow-lg shadow-cyan-500/10"
+                >
+                  View Your Token
+                </a>
+              </div>
+            )}
 
             {/* Total Fees */}
             <div className="mt-4 text-center">
               <p className="text-gray-300 font-inter">
-                Total Fees: <span className="text-white font-semibold">0.3 SOL</span>
+                Total Fees:{" "}
+                <span className="text-white font-semibold">0.3 SOL</span>
               </p>
             </div>
           </div>

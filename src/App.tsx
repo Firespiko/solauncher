@@ -1,65 +1,70 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { WagmiProvider } from 'wagmi';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
-import { 
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import type { WalletAdapter } from "@solana/wallet-adapter-base";
+import {
+  ConnectionProvider,
+  WalletProvider,
+} from "@solana/wallet-adapter-react";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { clusterApiUrl } from "@solana/web3.js";
+import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
-  TorusWalletAdapter,
   LedgerWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
-import { useMemo } from 'react';
+  TorusWalletAdapter,
+} from "@solana/wallet-adapter-wallets";
+import { useMemo } from "react";
 
-import { config } from './config/wagmi';
-import NewLandingPage from './pages/NewLandingPage';
-import UpcomingLaunches from './pages/UpcomingLaunches';
-import ApplyPage from './pages/ApplyPage';
-import LaunchpadPage from './pages/LaunchpadPage';
+// App pages
+import NewLandingPage from "./pages/NewLandingPage";
+import UpcomingLaunches from "./pages/UpcomingLaunches";
+import ApplyPage from "./pages/ApplyPage";
+import LaunchpadPage from "./pages/LaunchpadPage";
 
 // Import wallet adapter CSS
-import '@solana/wallet-adapter-react-ui/styles.css';
-
-const queryClient = new QueryClient();
+import "@solana/wallet-adapter-react-ui/styles.css";
 
 function App() {
-  const network = WalletAdapterNetwork.Mainnet;
+  const network = WalletAdapterNetwork.Devnet;
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
+  // 🛡️ Prevent Brave from spoofing Phantom
+  const isBraveFakingPhantom =
+    typeof window !== "undefined" &&
+    window.solana?.isBraveWallet === true &&
+    window.solana?.isPhantom === true;
+
+  const wallets: WalletAdapter[] = useMemo(() => {
+    const baseWallets: WalletAdapter[] = [
       new SolflareWalletAdapter(),
-      new TorusWalletAdapter(),
       new LedgerWalletAdapter(),
-    ],
-    []
-  );
+      new TorusWalletAdapter(),
+    ];
+
+    if (!isBraveFakingPhantom) {
+      baseWallets.unshift(new PhantomWalletAdapter());
+    }
+
+    return baseWallets;
+  }, [isBraveFakingPhantom]);
 
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <ConnectionProvider endpoint={endpoint}>
-          <WalletProvider wallets={wallets} autoConnect>
-            <WalletModalProvider>
-              <Router>
-                <div className="App">
-                  <Routes>
-                    <Route path="/" element={<NewLandingPage />} />
-                    <Route path="/upcoming" element={<UpcomingLaunches />} />
-                    <Route path="/apply" element={<ApplyPage />} />
-                    <Route path="/launchpad" element={<LaunchpadPage />} />
-                  </Routes>
-                </div>
-              </Router>
-            </WalletModalProvider>
-          </WalletProvider>
-        </ConnectionProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect={false}>
+        <WalletModalProvider>
+          <Router>
+            <div className="App">
+              <Routes>
+                <Route path="/" element={<NewLandingPage />} />
+                <Route path="/upcoming" element={<UpcomingLaunches />} />
+                <Route path="/apply" element={<ApplyPage />} />
+                <Route path="/launchpad" element={<LaunchpadPage />} />
+              </Routes>
+            </div>
+          </Router>
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
   );
 }
 
